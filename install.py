@@ -1,14 +1,23 @@
-from sys import exit, stdout
+from sys import exit
 from pathlib import Path
 from os import symlink
 from shutil import rmtree
+from sys import stdout
+
+from rich import print
+from rich.prompt import Confirm
+from rich.traceback import install; install(show_locals=True)
+
+from loguru import logger
+logger.remove()
+logger.add(stdout)
 
 CACHE_PATHS = [".local/state/nvim/", ".local/share/nvim/", ".config/nvim/"]
 
 try:
     HOME_PATH = Path().home()
 except RuntimeError as e:
-    print(f'failed to get HOME environment variable due to: {e}')
+    logger.error(f'failed to get HOME environment variable due to: {e}')
     exit(1)
 
 def remove_cache(cache_paths: list[str]) -> list[str]:
@@ -16,11 +25,10 @@ def remove_cache(cache_paths: list[str]) -> list[str]:
     paths = [HOME_PATH.joinpath(x) for x in cache_paths]
     for cache_dir in paths:
         if not cache_dir.exists():
-            print(f'{cache_dir.absolute()} does not exist. passing...')
-            continue 
+            logger.info(f'{cache_dir.absolute()} does not exist. passing...')
+            continue
 
-        answer = input(f'delete {cache_dir.absolute()} (y/N)? ') 
-        if answer.lower() == 'y':
+        if Confirm.ask(f'delete {cache_dir.absolute()}', default=False):
             try:
                 if cache_dir.is_symlink() or cache_dir.is_file():
                     cache_dir.unlink()
@@ -29,7 +37,7 @@ def remove_cache(cache_paths: list[str]) -> list[str]:
                 removed_paths.append(str(cache_dir.absolute()))
 
             except Exception as e:
-                print(f"failed to remove {cache_dir.absolute()} due to: {e}")
+                logger.error(f"failed to remove {cache_dir.absolute()} due to: {e}")
         else:
             print('installation aborted. exiting...')
             exit(0)
@@ -38,16 +46,18 @@ def remove_cache(cache_paths: list[str]) -> list[str]:
 def main():
     config_path = HOME_PATH / '.config/nvim'
     nvim_path = Path().joinpath('nvim')
-    print(f'removed directories: {remove_cache(CACHE_PATHS)}')
+    logger.info(f'removed directories: {remove_cache(CACHE_PATHS)}')
 
     if not nvim_path.exists():
-        print(f'could not find nvim folder in {nvim_path.absolute()}')
+        logger.critical(f'could not find nvim folder in {nvim_path.absolute()}')
         exit(1)
     
     try:
         symlink(nvim_path.absolute(), config_path.absolute())
+        logger.info(f'linked {nvim_path.absolute()} to {config_path.absolute()}.')
+
     except Exception as e:
-        print(f'failed to link {nvim_path.absolute()} to {config_path.absolute()} due to: {e}')
+        logger.critical(f'failed to link {nvim_path.absolute()} to {config_path.absolute()} due to: {e}')
 
 if __name__ == "__main__":
     main()
